@@ -141,15 +141,15 @@ pub struct ApiClient {
 impl ApiClient {
     pub fn new(session_key: String) -> Result<Self> {
         let client = Client::builder()
-            .user_agent("JinroCLI/0.1 (Rust)")
-            .timeout(Duration::from_secs(3))
+            .connect_timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
+            .tcp_keepalive(Duration::from_secs(30))
+            .pool_idle_timeout(Duration::from_secs(300))
             .build()?;
 
         Ok(Self {
             client,
-
             session_key,
-
             last_request: Arc::new(Mutex::new(None)),
         })
     }

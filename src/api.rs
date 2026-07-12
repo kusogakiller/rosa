@@ -142,7 +142,7 @@ impl ApiClient {
     pub fn new(session_key: String) -> Result<Self> {
         let client = Client::builder()
             .user_agent("JinroCLI/0.1 (Rust)")
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(3))
             .build()?;
 
         Ok(Self {

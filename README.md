@@ -4,8 +4,8 @@ An unofficial TUI client for **zinro.net**—a Japanese Werewolf game platform.
 
 > **New to Rosa?** Start with [Quick Start] to get running in minutes.
 
-> 🇺🇸 For English speakers  
-> English documentation is available here: [README.md](README.md)
+> 🇯🇵 日本語をご利用の方へ  
+> 日本語版ドキュメントはこちらです: [README.ja.md](README.ja.md)
 
 ---
 

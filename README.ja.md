@@ -4,8 +4,8 @@
 
 > **初めてですか？** [インストール]から始めれば、数分で動きます。
 
->  🇯🇵 日本語をご利用の方へ  
-> 日本語版ドキュメントはこちらです: [README.ja.md](README.ja.md)
+> 🇺🇸 For English speakers  
+> English documentation is available here: [README.md](README.md)
 
 ---
 

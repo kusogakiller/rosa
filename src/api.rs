@@ -17,8 +17,13 @@ const BASE_URL: &str = "https://zinro.net";
 
 const REQUEST_INTERVAL: Duration = Duration::from_secs(2);
 
+const PLAYERS_REFRESH_EVERY: u64 = 3;
+
+const MAX_BACKOFF: Duration = Duration::from_secs(60);
+
 #[derive(Clone)]
 pub struct ChatLine {
+    pub id: String,
     pub user: String,
     pub text: String,
     pub color: String,
@@ -70,6 +75,7 @@ pub fn parse_messages(raw: &str) -> Vec<ChatLine> {
     let mut lines: Vec<ChatLine> = array
         .iter()
         .map(|item| ChatLine {
+            id: field(item, "id"),
             user: field(item, "from_user"),
             text: field(item, "message"),
             color: field(item, "color"),
@@ -136,6 +142,12 @@ pub struct ApiClient {
     session_key: String,
 
     last_request: Arc<Mutex<Option<Instant>>>,
+
+    last_message_id: Arc<Mutex<Option<String>>>,
+
+    poll_tick: Arc<Mutex<u64>>,
+
+    backoff: Arc<Mutex<Duration>>,
 }
 
 impl ApiClient {
@@ -151,6 +163,9 @@ impl ApiClient {
             client,
             session_key,
             last_request: Arc::new(Mutex::new(None)),
+            last_message_id: Arc::new(Mutex::new(None)),
+            poll_tick: Arc::new(Mutex::new(0)),
+            backoff: Arc::new(Mutex::new(Duration::from_millis(0))),
         })
     }
 
@@ -199,6 +214,8 @@ impl ApiClient {
 
         info!(status = response.status().as_u16(), "GET request");
 
+        *self.backoff.lock().await = Duration::from_millis(0);
+
         Ok(response)
     }
 
@@ -216,6 +233,8 @@ impl ApiClient {
         self.update_request_time().await;
 
         info!(status = response.status().as_u16(), "POST request");
+
+        *self.backoff.lock().await = Duration::from_millis(0);
 
         Ok(response)
     }
@@ -237,26 +256,64 @@ impl ApiClient {
     }
 
     pub async fn get_messages(&self, last_id: Option<&str>) -> Result<String> {
-        let mut params = vec![
+        let mut params: Vec<(&str, &str)> = vec![
             ("mode", "message"),
             ("id", "You have good taste, my friend."),
         ];
 
         if let Some(id) = last_id {
             params.push(("last_id", id));
+        } else {
+            params.push(("last_id", ""));
         }
 
         Ok(self.get("/m/api/", &params).await?.text().await?)
     }
 
     pub async fn poll_messages(&self) -> Result<Vec<ChatLine>> {
-        let raw = self.get_messages(None).await?;
-        Ok(parse_messages(&raw))
+        let last_id = {
+            let guard = self.last_message_id.lock().await;
+            guard.clone()
+        };
+
+        let raw = self.get_messages(last_id.as_deref()).await?;
+        let lines = parse_messages(&raw);
+
+        if let Some(max_id) = lines.iter().map(|l| l.id.as_str()).max() {
+            let mut guard = self.last_message_id.lock().await;
+            *guard = Some(max_id.to_string());
+        }
+
+        Ok(lines)
     }
 
-    pub async fn poll_players(&self) -> Result<PlayersSnapshot> {
+    pub async fn poll_players(&self) -> Result<Option<PlayersSnapshot>> {
+        let mut tick = self.poll_tick.lock().await;
+        *tick += 1;
+        if *tick % PLAYERS_REFRESH_EVERY != 0 {
+            return Ok(None);
+        }
+
         let raw = self.get_players().await?;
-        Ok(parse_players(&raw))
+        Ok(Some(parse_players(&raw)))
+    }
+
+    pub async fn next_poll_delay(&self, interval: Duration) -> Duration {
+        let mut backoff = self.backoff.lock().await;
+        if *backoff > Duration::from_millis(0) {
+            let wait = *backoff;
+            *backoff = (*backoff * 2).min(MAX_BACKOFF);
+            wait
+        } else {
+            interval
+        }
+    }
+
+    pub async fn mark_failure(&self) {
+        let mut backoff = self.backoff.lock().await;
+        if *backoff == Duration::from_millis(0) {
+            *backoff = Duration::from_secs(2);
+        }
     }
 
     pub async fn get_players(&self) -> Result<String> {

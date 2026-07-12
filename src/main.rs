@@ -18,6 +18,7 @@ pub struct Room {
     pub name: String,
 }
 
+#[derive(Clone)]
 pub struct Message {
     pub user: String,
     pub text: String,
@@ -161,7 +162,7 @@ impl App {
                     let was_at_bottom =
                         self.messages.is_empty() || self.message_cursor + 1 >= self.messages.len();
 
-                    let server: Vec<Message> = lines
+                    let server_new: Vec<Message> = lines
                         .into_iter()
                         .map(|line| Message {
                             user: line.user,
@@ -178,11 +179,18 @@ impl App {
                     };
 
                     self.pending_text
-                        .retain(|text| !server.iter().any(|m| m.user == my && m.text == *text));
+                        .retain(|text| !server_new.iter().any(|m| m.user == my && m.text == *text));
 
-                    let mut merged = server;
+                    let mut kept: Vec<Message> = self
+                        .messages
+                        .iter()
+                        .filter(|m| m.pending)
+                        .cloned()
+                        .collect();
+                    kept.extend(server_new);
+
                     for text in self.pending_text.clone() {
-                        merged.push(Message {
+                        kept.push(Message {
                             user: if self.my_name.is_empty() {
                                 "me".into()
                             } else {
@@ -194,7 +202,7 @@ impl App {
                         });
                     }
 
-                    self.messages = merged;
+                    self.messages = kept;
 
                     let last = self.messages.len().saturating_sub(1);
 
@@ -654,26 +662,34 @@ impl App {
 
 fn spawn_poll_task(api: Arc<ApiClient>, tx: UnboundedSender<ApiEvent>, interval_ms: u64) {
     tokio::spawn(async move {
+        let interval = Duration::from_millis(interval_ms);
+
         loop {
             match api.poll_messages().await {
                 Ok(lines) => {
-                    let _ = tx.send(ApiEvent::Messages(lines));
+                    if !lines.is_empty() {
+                        let _ = tx.send(ApiEvent::Messages(lines));
+                    }
                 }
                 Err(err) => {
+                    api.mark_failure().await;
                     let _ = tx.send(ApiEvent::Error(err.to_string()));
                 }
             }
 
             match api.poll_players().await {
-                Ok(users) => {
+                Ok(Some(users)) => {
                     let _ = tx.send(ApiEvent::Players(users));
                 }
+                Ok(None) => {}
                 Err(err) => {
+                    api.mark_failure().await;
                     let _ = tx.send(ApiEvent::Error(err.to_string()));
                 }
             }
 
-            tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+            let delay = api.next_poll_delay(interval).await;
+            tokio::time::sleep(delay).await;
         }
     });
 }

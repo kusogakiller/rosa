@@ -1,0 +1,37 @@
+# Environment variables
+.env
+.env.*
+*.env
+
+# Build output
+/target/
+
+# Rust build artifacts
+**/*.rs.bk
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test / coverage output
+coverage/
+*.profraw
+
+# dotenv backups
+.env.local
+.env.development
+.env.production

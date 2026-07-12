@@ -665,31 +665,30 @@ fn spawn_poll_task(api: Arc<ApiClient>, tx: UnboundedSender<ApiEvent>, interval_
         let interval = Duration::from_millis(interval_ms);
 
         loop {
-            match api.poll_messages().await {
+            match api.get_messages().await {
                 Ok(lines) => {
                     if !lines.is_empty() {
                         let _ = tx.send(ApiEvent::Messages(lines));
                     }
                 }
                 Err(err) => {
-                    api.mark_failure().await;
                     let _ = tx.send(ApiEvent::Error(err.to_string()));
                 }
             }
-
-            match api.poll_players().await {
-                Ok(Some(users)) => {
-                    let _ = tx.send(ApiEvent::Players(users));
+        
+            let poll_ms = api.measured_poll_interval().await;
+            info!("actual poll interval: {} ms", poll_ms);
+        
+            match api.get_players().await {
+                Ok(snapshot) => {
+                    let _ = tx.send(ApiEvent::Players(snapshot));
                 }
-                Ok(None) => {}
                 Err(err) => {
-                    api.mark_failure().await;
                     let _ = tx.send(ApiEvent::Error(err.to_string()));
                 }
             }
-
-            let delay = api.next_poll_delay(interval).await;
-            tokio::time::sleep(delay).await;
+        
+            tokio::time::sleep(interval).await;
         }
     });
 }

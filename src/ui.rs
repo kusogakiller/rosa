@@ -93,6 +93,10 @@ fn panel_block(icon: &str, title: &str, focused: bool) -> Block<'static> {
 }
 
 pub fn draw(frame: &mut Frame, app: &App) {
+    if frame.area().height < 14 || frame.area().width < 35 {
+        return;
+    }
+
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([

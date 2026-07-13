@@ -5,6 +5,8 @@ use std::{io, sync::Arc, time::Duration};
 
 use anyhow::Result;
 
+use tracing::info;
+
 use api::{ApiClient, ChatLine, PlayerInfo, PlayersSnapshot, RoomInfo};
 
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -30,10 +32,21 @@ pub enum ApiEvent {
     Messages(Vec<ChatLine>),
     Players(PlayersSnapshot),
     Error(String),
+    SendFailed(String),
 }
 
 pub enum ApiCommand {
     Send(String),
+}
+
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = crossterm::terminal::disable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = crossterm::execute!(stdout, crossterm::terminal::LeaveAlternateScreen);
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -243,6 +256,24 @@ impl App {
                     color: "tomato".into(),
                     pending: false,
                 });
+            }
+
+            ApiEvent::SendFailed(text) => {
+                if let Some(pos) = self
+                    .messages
+                    .iter()
+                    .rposition(|m| m.pending && m.text == text)
+                {
+                    self.messages.remove(pos);
+                    self.message_cursor = self
+                        .message_cursor
+                        .min(self.messages.len().saturating_sub(1));
+                    self.scroll = self.message_cursor;
+                }
+
+                if let Some(pos) = self.pending_text.iter().position(|t| t == &text) {
+                    self.pending_text.remove(pos);
+                }
             }
         }
     }
@@ -704,6 +735,7 @@ fn spawn_command_task(
                 ApiCommand::Send(text) => {
                     if let Err(err) = api.send_message(&text).await {
                         let _ = tx.send(ApiEvent::Error(err.to_string()));
+                        let _ = tx.send(ApiEvent::SendFailed(text));
                     }
                 }
             }
@@ -736,6 +768,8 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
 
     let mut terminal = Terminal::new(backend)?;
+
+    let _guard = TerminalGuard;
 
     let mut app = App::new(api, cmd_tx);
 

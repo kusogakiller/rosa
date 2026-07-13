@@ -1,4 +1,6 @@
 use std::{
+    fs::OpenOptions,
+    io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -91,6 +93,21 @@ pub fn parse_players(raw: &str) -> PlayersSnapshot {
         .get("players")
         .and_then(|v| v.as_object())
         .map(|map| {
+            for p in map.values() {
+                let _ = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("rosa_debug.log")
+                    .and_then(|mut f| {
+                        writeln!(
+                            f,
+                            "name={} job={:?} is_active={:?}",
+                            field(p, "name"),
+                            field(p, "job"),
+                            p.get("is_active")
+                        )
+                    });
+            }
             map.values()
                 .map(|p| PlayerInfo {
                     name: field(p, "name"),

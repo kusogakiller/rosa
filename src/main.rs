@@ -25,6 +25,7 @@ pub struct Message {
     pub user: String,
     pub text: String,
     pub color: String,
+    pub job: String,
     pub pending: bool,
 }
 
@@ -135,6 +136,7 @@ impl App {
                 user: "system".into(),
                 text: "RosaClient started".into(),
                 color: "skyblue".into(),
+                job: String::new(),
                 pending: false,
             }],
 
@@ -177,11 +179,20 @@ impl App {
 
                     let server_new: Vec<Message> = lines
                         .into_iter()
-                        .map(|line| Message {
-                            user: line.user,
-                            text: line.text,
-                            color: line.color,
-                            pending: false,
+                        .map(|line| {
+                            let job = self
+                                .users
+                                .iter()
+                                .find(|u| u.name == line.user)
+                                .map(|u| u.job.clone())
+                                .unwrap_or_default();
+                            Message {
+                                user: line.user,
+                                text: line.text,
+                                color: line.color,
+                                job,
+                                pending: false,
+                            }
                         })
                         .collect();
 
@@ -201,19 +212,6 @@ impl App {
                         .cloned()
                         .collect();
                     kept.extend(server_new);
-
-                    for text in self.pending_text.clone() {
-                        kept.push(Message {
-                            user: if self.my_name.is_empty() {
-                                "me".into()
-                            } else {
-                                self.my_name.clone()
-                            },
-                            text,
-                            color: self.my_color.clone(),
-                            pending: true,
-                        });
-                    }
 
                     self.messages = kept;
 
@@ -254,6 +252,7 @@ impl App {
                     user: "system".into(),
                     text: reason,
                     color: "tomato".into(),
+                    job: String::new(),
                     pending: false,
                 });
             }
@@ -602,14 +601,22 @@ impl App {
 
                     self.pending_text.push(text.clone());
 
+                    let my_name = if self.my_name.is_empty() {
+                        "me".into()
+                    } else {
+                        self.my_name.clone()
+                    };
+                    let job = self
+                        .users
+                        .iter()
+                        .find(|u| u.name == my_name)
+                        .map(|u| u.job.clone())
+                        .unwrap_or_default();
                     self.messages.push(Message {
-                        user: if self.my_name.is_empty() {
-                            "me".into()
-                        } else {
-                            self.my_name.clone()
-                        },
+                        user: my_name,
                         text,
                         color: self.my_color.clone(),
+                        job,
                         pending: true,
                     });
 

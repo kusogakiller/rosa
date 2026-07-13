@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use reqwest::{Client, Response};
 
-use tokio::{sync::Mutex, time::sleep};
+use tokio::sync::Mutex;
 
 use tracing::info;
 
@@ -30,6 +30,7 @@ pub struct PlayerInfo {
     pub color: String,
     pub alive: bool,
     pub is_cpu: bool,
+    pub is_active: bool,
 }
 
 #[derive(Clone, Default)]
@@ -97,6 +98,10 @@ pub fn parse_players(raw: &str) -> PlayersSnapshot {
                     color: field(p, "color"),
                     alive: field(p, "alive") == "1",
                     is_cpu: field(p, "is_cpu") == "1",
+                    is_active: p
+                        .get("is_active")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
                 })
                 .collect()
         })

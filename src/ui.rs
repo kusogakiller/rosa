@@ -31,31 +31,6 @@ impl Theme {
 const SEP_RIGHT: &str = "\u{e0b0}";
 const SEP_LEFT: &str = "\u{e0b2}";
 
-fn chat_color(name: &str) -> Color {
-    if let Some(hex) = name.strip_prefix('#') {
-        let hex = match hex.len() {
-            3 => hex.chars().flat_map(|c| [c, c]).collect::<String>(),
-            _ => hex.to_string(),
-        };
-        if hex.len() == 6 {
-            if let Ok(rgb) = u32::from_str_radix(&hex, 16) {
-                return Color::Rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8);
-            }
-        }
-    }
-
-    match name {
-        "white" => Color::Rgb(205, 214, 244),
-        "tomato" => Color::Rgb(243, 139, 168),
-        "lime" => Color::Rgb(166, 227, 161),
-        "tan" => Color::Rgb(250, 179, 135),
-        "violet" => Color::Rgb(203, 166, 247),
-        "pink" => Color::Rgb(245, 194, 231),
-        "skyblue" => Color::Rgb(137, 220, 235),
-        _ => Theme::TEXT,
-    }
-}
-
 fn panel_block(icon: &str, title: &str, focused: bool) -> Block<'static> {
     let border = if focused {
         Theme::MAUVE
@@ -245,24 +220,24 @@ fn draw_explorer(frame: &mut Frame, app: &App, area: Rect) {
             .map(|user| {
                 let is_spectator = user.job == "\u{89b3}\u{6218}\u{8005}";
 
-                let (icon, icon_color) = if is_spectator {
-                    ("\u{f09ce}", Theme::PINK)
-                } else if !user.alive {
+                let (icon, icon_color) = if !user.is_active {
                     ("\u{f0159}", Theme::OVERLAY)
+                } else if is_spectator {
+                    ("\u{f09ce}", Theme::PINK)
                 } else if user.is_cpu {
                     ("\u{f12b1}", Theme::BLUE)
                 } else {
                     ("\u{f04b}", Theme::GREEN)
                 };
 
-                let name_style = if is_spectator {
-                    Style::default().fg(Theme::PINK)
-                } else if user.alive {
-                    Style::default().fg(chat_color(&user.color))
-                } else {
+                let name_style = if !user.is_active {
                     Style::default()
                         .fg(Theme::OVERLAY)
                         .add_modifier(Modifier::CROSSED_OUT)
+                } else if is_spectator {
+                    Style::default().fg(Theme::PINK)
+                } else {
+                    Style::default().fg(Theme::TEXT)
                 };
 
                 ListItem::new(Line::from(vec![
@@ -300,7 +275,12 @@ fn draw_chat(frame: &mut Frame, app: &App, area: Rect) {
         .messages
         .iter()
         .map(|message| {
-            let base = chat_color(&message.color);
+            let is_spectator = message.job == "\u{89b3}\u{6218}\u{8005}";
+            let base = if is_spectator {
+                Theme::PINK
+            } else {
+                Theme::TEXT
+            };
             let status = if message.pending {
                 Span::styled(
                     "  \u{f252} sending\u{2026}",
@@ -318,7 +298,7 @@ fn draw_chat(frame: &mut Frame, app: &App, area: Rect) {
                     Style::default().fg(base).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("  ", Style::default()),
-                Span::styled(message.text.clone(), Style::default().fg(Theme::TEXT)),
+                Span::styled(message.text.clone(), Style::default().fg(base)),
                 status,
             ]);
             ListItem::new(line)
